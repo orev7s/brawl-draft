@@ -178,3 +178,40 @@ instruction. Tests (`test_assets/bd_ban_test.sh`, `bd_ban_test2.sh`):
 device with `printf` and collapse the system prompt to one line
 (`tr '\n' ' ' | sed 's/"/\\"/g'`) so it stays valid JSON. Do not try to nest the API's own reply
 back into a follow up request from shell - hardcode the assistant turn instead.
+
+## Session 5 (2026-10-16, later): published names + repair pass (v1.4)
+
+### The names file is the single source of truth
+`app/src/main/assets/brawl_data.json` holds brawlers, ranked map lists per mode, game terms and
+observed speech-to-text mistakes. It is committed to GitHub (the repo is **public**, which matters
+because the app fetches it unauthenticated) and pulled at startup plus every 5 minutes by
+`NamesRepo`, cached in prefs, with the bundled asset as fallback. **Never hardcode a brawler or map
+list in Kotlin again** - add it to the JSON. `BrawlData.kt` was deleted for this reason.
+
+To add a map or brawler: edit the file on GitHub, save, and the tablet picks it up within 5 minutes.
+No rebuild, no reinstall.
+
+### The repair pass
+Pipeline is now: 16 kHz PCM segments -> Whisper -> **name repair** -> coach.
+- Model: `qwen/qwen3.8-27b`, `temperature=0`, `max_tokens=1024`, measured 0.57-0.76 s.
+  It beat gpt-oss-20b (2.31 s) and destroyed allam-2-7b (missed 3 of 4 fixes and invented a name).
+- The reply budget for reasoning models must cover thinking as well as the answer. `gpt-oss-20b`
+  with `max_tokens=300` returned `content:""` with `finish_reason:"length"`, which the app used to
+  display as total silence.
+- On any exception the raw transcript is used. Never let the repair pass block the coach.
+- The overlay prints `(heard: ...)` whenever the repair changed the text, so a bad correction is
+  visible rather than silent.
+
+### Gotchas found the hard way
+- `printf` needs `\\n` to emit a JSON `\n`. A plain `\n` puts a raw newline inside the JSON string
+  and Groq answers `400 failed to unmarshal JSON`. Two wasted test rounds on this.
+- Inside `object : Runnable { override fun run() { ... } }`, `this` is the Runnable, not the
+  Service. Use `this@OverlayService` when passing a Context.
+- Check model availability with `GET /openai/v1/models` before shipping a model name. Only these
+  were callable: gpt-oss-120b, gpt-oss-20b, gpt-oss-safeguard-20b, qwen3.8-27b, allam-2-7b,
+  whisper-large-v3(-turbo), plus the TTS and prompt-guard models. `llama-3.3-70b-versatile` is gone.
+- Do not put `android.aapt2FromMavenOverride` in `gradle.properties`: it would break any build
+  outside Termux, including GitHub Actions. `bd_build2.sh` passes it with `-P` instead, so the
+  repository stays clean and a `git reset --hard` on the tablet cannot break the build.
+- `adb shell "su -c '...'"` mangles `$VAR`, braces and pipes. Write the script to a file, push it,
+  run it. This bit three times in one session.

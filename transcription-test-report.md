@@ -139,3 +139,64 @@ clarifying-question rule was added.
   is the `You: ...` line in the overlay, which shows exactly what the transcriber heard.
 - Not yet tested: whether another ASR provider (Deepgram Nova, AssemblyAI Universal-2) drops
   "not" less often on this speaker. That needs a key and one recording of the failing sentence.
+
+---
+
+# Addendum 2: name-repair pass and the published name lists (v1.4)
+
+## The reference file
+
+`app/src/main/assets/brawl_data.json` - 108 brawlers, every ranked mode's map list
+(Gem Grab 25, Brawl Ball 25, Hot Zone 20, Heist 19, Bounty 16, Knockout 26, Brawl Hockey 15
+after de-duplicating names that appear twice in the source), 26 game terms, and 21
+observed speech-to-text mistakes collected from the transcripts in this report.
+
+Published at
+`https://raw.githubusercontent.com/orev7s/brawl-draft/main/app/src/main/assets/brawl_data.json`
+and fetched by the app at startup and every 5 minutes, cached on device, with the bundled copy as
+the offline fallback. Verified on the tablet: `I BrawlDraft: names refreshed, 4802 chars`.
+
+## Model choice for the repair pass
+
+Same mangled transcript, four candidates:
+
+| Model | Time | Result |
+|---|---|---|
+| **qwen/qwen3.8-27b** | **0.76 s** | Emz, Chuck, Gus, R-T and Ring of Fire all correct |
+| openai/gpt-oss-20b | 2.31 s | all correct, but 3x slower |
+| qwen/qwen3.8-27b, reasoning_effort=low | 1.24 s | correct, slower than default |
+| allam-2-7b | 0.45 s | fixed only "Ems", invented "Cordelia" - rejected |
+
+## End-to-end with the exact context the app builds
+
+Input, containing every observed failure:
+
+> we are playing open map hot zone on rings of fire. Ems is banned, Gray is banned, Chug is banned
+> and Squeak is banned. my team picked Gull and Edgar, the enemy picked Sirius, Kaze and Cordelius.
+> should they pick Shelly or Colt or Bull or Artie
+
+Output, HTTP 200 in **0.57 s**:
+
+> we are playing open map hot zone on **Ring of Fire**. **Emz** is banned, Gray is banned,
+> **Chuck** is banned and Squeak is banned. my team picked **Gus** and Edgar, the enemy picked
+> Sirius, Kaze and Cordelius. should they pick Shelly or Colt or Bull or **R-T**
+
+Five repairs, no other word changed, question not answered, meaning intact.
+
+## How it behaves in the app
+
+- Runs after transcription and before the coach, only when a transcript exists.
+- On any failure, timeout or empty output the raw transcript is used instead. The coach is never blocked.
+- The overlay shows `You: <repaired>` and, when the repair changed something, a second line
+  `(heard: <raw>)`, so a wrong repair is visible instead of silent.
+- Toggle and model are in settings (`clean_enabled`, `clean_model`). Cost is one extra request per
+  turn against the free tier.
+
+## Limits
+
+- The repair pass fixes names, not grammar or meaning. It will not recover a word the transcriber
+  dropped entirely, e.g. a lost "not", which is the open issue from Addendum 1.
+- It can over-correct: "back" is mapped to "banned" in the observed list, so a legitimate "back"
+  would be rewritten. Review the `(heard: ...)` line and trim that entry in the JSON if it misfires.
+- Every name list comes from brawlify.com, not from Supercell. A new brawler or a rotated map will
+  be missing until the JSON is edited. Editing the file on GitHub is enough, no rebuild needed.
