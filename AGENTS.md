@@ -284,3 +284,39 @@ guess that 404s. Only preset a model ID that was verified against the vendor's o
   AI Studio rate-limit page. Do not quote numbers at the owner as if they were public fact.
 - `buildString { }` rebinds `this` to the StringBuilder. Use `this@OverlayService` inside it, the
   same trap as `object : Runnable`.
+
+## Session 8 (2026-10-16, later): AgentRouter rejects any non-approved client
+
+### Finding
+AgentRouter (agentrouter.org) is an OpenAI-compatible gateway that gates on **client identity**, not
+on credentials. Every probe returned the identical body:
+
+    HTTP 401
+    {"error":{"message":"unauthorized client detected, contact support for assistance at
+     https://discord.gg/HgekCyHJqB"},"message":"UNAUTHENTICATED","success":false,
+     "type":"unauthorized_client_error"}
+
+The decisive probe is `GET /v1/models` **with no Authorization header at all**: same 401, same
+message. The gateway rejects the request before it ever looks at the key, so it cannot be fixed from
+our side by changing the model name, the key, the auth header style (`Bearer` vs `x-api-key`), the
+endpoint (`/chat/completions` vs `/responses`), or the User-Agent (tested an honest one).
+
+Their documentation lists the clients they support - Cline, Roo, Kilo, Claude Code, Codex, Qwen
+Code, OpenCode, OpenClaw, Hermes, Pi, Crush, Trae, ZCode, WorkBuddy, Craft Agents, the Claude app.
+A custom Android app is not among them.
+
+**Do not work around this by impersonating an approved client** (spoofed User-Agent, TLS
+fingerprint, or a relay pretending to be one). That is circumventing their access control, likely
+breaches their terms, and risks the owner's account. The legitimate route is their support Discord,
+and the practical route is a provider that accepts arbitrary clients.
+
+### Lesson for the next provider
+"OpenAI-compatible" describes the request shape, not the admission policy. Some gateways
+fingerprint the client. When a gateway 401s, always probe an endpoint that needs no credentials
+(`GET /models`) before blaming the key or the model name. Diagnosing with the real key on the
+device (never in the repo) plus that one unauthenticated probe settled it in two rounds.
+
+### Recovery
+The provider presets never touch the speech-to-text fields, and one Groq key serves both Groq
+Whisper and Groq chat, so the chat settings can always be restored from `stt_key` without asking the
+owner for anything. `test_assets/bd_restore_groq.sh` does exactly that.
