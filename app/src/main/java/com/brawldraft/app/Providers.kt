@@ -36,12 +36,15 @@ object Providers {
     val GEMINI = Provider(
         label = "Google Gemini (free tier)",
         baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai",
-        chatModel = "gemini-3.8-flash",
-        cleanModel = "gemini-3.8-flash",
+        chatModel = "gemini-3.5-flash",
+        cleanModel = "gemini-2.5-flash-lite",
         note = "Recommended for the knowledge block: by far the highest tokens per minute of the " +
-            "free options and a very large context, with no card. Daily request caps vary per " +
-            "model and are only shown in AI Studio. Free tier data is used to improve Google " +
-            "products. Key: aistudio.google.com/apikey"
+            "free options and a very large context, with no card. Availability is per model and " +
+            "moves constantly: probed 2026-10-16, gemini-3.8-flash was returning 503 high demand " +
+            "while 3.6-flash, 3.5-flash, 3-flash-preview and 2.5-flash-lite all answered, and " +
+            "2.5-flash / 2.5-pro were 404 retired for new users. If a model starts failing, list " +
+            "them with GET /models and pick one that actually answers. Free tier data improves " +
+            "Google products. Key: aistudio.google.com/apikey"
     )
 
     val CEREBRAS = Provider(
