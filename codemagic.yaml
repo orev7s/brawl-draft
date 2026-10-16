@@ -1,0 +1,28 @@
+workflows:
+  android-debug:
+    name: Brawl Draft debug APK
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      java: 17
+      vars:
+        GRADLE_VERSION: "8.7"
+    scripts:
+      - name: Install Gradle 8.7
+        script: |
+          curl -L -s -o gradle.zip https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+          unzip -q gradle.zip -d $HOME/gradle
+          echo "GRADLE_BIN=$HOME/gradle/gradle-${GRADLE_VERSION}/bin" >> $CM_ENV
+      - name: Point Gradle to Android SDK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+      - name: Build debug APK
+        script: |
+          export PATH=$HOME/gradle/gradle-${GRADLE_VERSION}/bin:$PATH
+          gradle :app:assembleDebug --stacktrace
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
+    publishing:
+      email:
+        recipients:
+          - doraenside@gmail.com
