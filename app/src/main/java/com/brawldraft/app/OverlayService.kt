@@ -185,9 +185,12 @@ class OverlayService : Service() {
         promptSync = PromptSync(this)
         promptSync.start()
 
-        // Pull the published name lists without blocking startup, then refresh occasionally so an
-        // edit on GitHub reaches the tablet without a rebuild.
-        Thread({ NamesRepo.refresh(this) }, "bd-names").start()
+        // Pull the published name lists and the knowledge file without blocking startup, then
+        // refresh occasionally so an edit on GitHub reaches the tablet without a rebuild.
+        Thread({
+            NamesRepo.refresh(this)
+            KnowledgeRepo.refresh(this)
+        }, "bd-names").start()
         main.postDelayed(namesRefreshTask, NAMES_REFRESH_MS)
 
         tts = TextToSpeech(this) { status ->

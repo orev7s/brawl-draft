@@ -246,3 +246,41 @@ only - never the keys, never the speech-to-text settings. Paste the new key afte
 - Gemini 3.x cannot disable thinking, and thinking tokens come out of the same `max_tokens` budget.
   If replies come back empty, raise `MAX_REPLY_TOKENS` - this is the same failure that made
   gpt-oss-20b return nothing at 300 tokens.
+
+## Session 7 (2026-10-16, later): knowledge base + provider list (v1.6)
+
+### The knowledge block
+`app/src/main/assets/coach_knowledge.md` (~8.5 KB, ~2,100 tokens) is appended to the system prompt
+when `knowledge_enabled` is true, via `KnowledgeRepo` (same fetch/cache/bundled-fallback pattern as
+the names file, refreshed at startup and every 5 minutes). Settings shows the live size.
+
+What it deliberately contains, and why:
+- **MEASURED numbers with a named source and date** (topbrawl.com/rankeds, 334,058 games,
+  2026-10-16): win% and pick% for the brawlers that matter, cross-checked against one other tier
+  list. The file instructs the model never to state a number that is not in that table.
+- **Role taxonomy and seven counter rules.** This is the part that generalises to all 108 brawlers
+  without an impossible 108x108 counter matrix: assassins beat throwers/snipers/supports, tanks beat
+  assassins, throwers beat tanks, controllers beat melee rushes, and never stack two squishy roles
+  into two divers.
+- **The canonical draft** (enemy Edgar+Mortis into our Sprout+Dynamike) spelled out as a worked
+  example, since that is the exact reasoning the owner asked for.
+- **Map reading** (open / walled / bushy / objective) and the measured current ranked map rotation.
+
+What it deliberately does NOT contain: invented per-map tier tables. There is no cheap source for
+per-map picks across the rotation without scraping ~150 pages, so the file tells the model to reason
+from the map type and to say it does not know rather than invent a layout. **Do not "improve" this
+by filling in made-up map statistics.**
+
+### Providers
+`Providers.kt` now lists nine: Gemini, Groq, Cerebras, Claude, OpenAI, DeepSeek, xAI Grok,
+OpenRouter and Custom. An **empty model field is deliberate** - it means the model IDs change too
+often to preset, so the preset sets the base URL and clears the model fields rather than shipping a
+guess that 404s. Only preset a model ID that was verified against the vendor's own docs that day.
+
+### Gotchas
+- Refreshing at startup means refreshing **both** `NamesRepo` and `KnowledgeRepo`. Wiring only the
+  names repo into the startup thread left the knowledge file un-fetched for the first 5 minutes.
+- Google no longer publishes Gemini free-tier limits per model; they only appear in the owner's
+  AI Studio rate-limit page. Do not quote numbers at the owner as if they were public fact.
+- `buildString { }` rebinds `this` to the StringBuilder. Use `this@OverlayService` inside it, the
+  same trap as `object : Runnable`.
