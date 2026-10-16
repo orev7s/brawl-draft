@@ -103,6 +103,17 @@ class MainActivity : Activity() {
         addField(col, "Chat API key", Prefs.KEY_LLM_KEY, "", secret = true)
         addField(col, "Chat model", Prefs.KEY_LLM_MODEL, Prefs.DEFAULT_LLM_MODEL)
 
+        hint(
+            col,
+            "One tap below switches the chat base URL and both model fields. Speech to text is " +
+                "never touched, so Whisper stays where it is. The API key is never overwritten, " +
+                "so paste the matching provider key after switching and save."
+        )
+        for (p in Providers.ALL) {
+            addButton(col, p.label) { applyProvider(p) }
+            hint(col, p.note)
+        }
+
         section(col, "Name check before the coach")
         hint(
             col,
@@ -136,9 +147,9 @@ class MainActivity : Activity() {
         addCheck(col, "Upload and transcribe while recording (fastest)", Prefs.KEY_STREAM_UPLOAD, true)
         hint(
             col,
-            "Audio is cut into 4 second clips and transcribed while you are still talking, so " +
-                "tapping Send only has to finish the last short clip. With this off the whole " +
-                "take is sent at the end - slower, but a cancelled take costs nothing."
+            "Audio is cut into clips of the length above and transcribed while you are still " +
+                "talking, so tapping Send only has to finish the last short clip. With this off " +
+                "the whole take is sent at the end - slower, but a cancelled take costs nothing."
         )
 
         section(col, "System prompt")
@@ -237,6 +248,16 @@ class MainActivity : Activity() {
         } else {
             "Saved. Replies will close themselves after ${ms / 1000.0}s."
         }
+    }
+
+    /** Switches provider without touching the keys or the speech-to-text settings. */
+    private fun applyProvider(p: Provider) {
+        fields[Prefs.KEY_LLM_URL]?.setText(p.baseUrl)
+        fields[Prefs.KEY_LLM_MODEL]?.setText(p.chatModel)
+        fields[Prefs.KEY_CLEAN_MODEL]?.setText(p.cleanModel)
+        save()
+        status.text = "Switched to ${p.label}. Now paste that provider's API key into the Chat " +
+            "API key field above and tap Save settings."
     }
 
     private fun useGroqDefaults() {

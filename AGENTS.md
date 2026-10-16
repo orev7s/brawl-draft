@@ -215,3 +215,34 @@ Pipeline is now: 16 kHz PCM segments -> Whisper -> **name repair** -> coach.
   repository stays clean and a `git reset --hard` on the tablet cannot break the build.
 - `adb shell "su -c '...'"` mangles `$VAR`, braces and pipes. Write the script to a file, push it,
   run it. This bit three times in one session.
+
+## Session 6 (2026-10-16, later): provider choice and the token wall (v1.5)
+
+### The constraint that drives everything
+Groq's free tier caps **every** chat model at **8K tokens per minute** (200K/day, 30 RPM). A large
+system prompt cannot work there: one coach turn with a 5K token prompt plus a cleaner turn is
+~8.5K tokens, so it immediately rate limits. Token budget, not model quality, is what limits how
+much game knowledge the coach can hold.
+
+### Verified free options (checked against provider docs on 2026-10-16)
+| Provider | Free chat allowance | Notes |
+|---|---|---|
+| Groq | 8K TPM, 200K TPD, 30 RPM | permanently free, renewing, no card. Same models as Cerebras. |
+| Google Gemini | not published per model; read it in AI Studio | highest TPM of the free options and a huge context, no card. Free tier data feeds Google's products. |
+| Cerebras | 30K uncached TPM, 1M TPD, 5 RPM, ~3000 tok/s | **NOT permanently free**: $5 credit, expires after 30 days, needs a verified payment method. Only `gpt-oss-120b` and `qwen-3.8-27b`. |
+
+All three speak the OpenAI chat completions shape, so switching is a base URL and a model name:
+- Groq            `https://api.groq.com/openai/v1` -> `openai/gpt-oss-120b`, cleaner `qwen/qwen3.8-27b`
+- Google Gemini   `https://generativelanguage.googleapis.com/v1beta/openai` -> `gemini-3.8-flash`
+- Cerebras        `https://api.cerebras.ai/v1` -> `gpt-oss-120b`, cleaner `qwen-3.8-27b`
+
+`Providers.kt` holds these as one-tap presets. A preset changes the chat URL and both model fields
+only - never the keys, never the speech-to-text settings. Paste the new key afterwards.
+
+### Still to check when a key exists
+- Whether Cerebras accepts `max_tokens`. Its docs push `max_completion_tokens`, and its rate
+  limiter reserves quota from that value before running the request. If it 400s, switch the app to
+  send `max_completion_tokens`.
+- Gemini 3.x cannot disable thinking, and thinking tokens come out of the same `max_tokens` budget.
+  If replies come back empty, raise `MAX_REPLY_TOKENS` - this is the same failure that made
+  gpt-oss-20b return nothing at 300 tokens.
