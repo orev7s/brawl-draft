@@ -1,7 +1,17 @@
 package com.brawldraft.app
 
 import android.content.Context
+import android.content.SharedPreferences
 
+/**
+ * All persisted settings.
+ *
+ * Writes use [SharedPreferences.Editor.commit] rather than `apply`, because `apply` is asynchronous
+ * and a value can be lost if the process dies right after it is set. Settings, API keys and the
+ * conversation history go through here, so they survive the app being killed, swiped away, or the
+ * tablet being restarted. Only the log buffer uses the async path, since losing the last line of a
+ * log is not important.
+ */
 object Prefs {
     private const val FILE = "brawl_draft_prefs"
 
@@ -11,10 +21,20 @@ object Prefs {
     const val KEY_STT_MODEL = "stt_model"
     const val KEY_STT_PROMPT = "stt_prompt"
 
-    // Coach LLM (any OpenAI-compatible /chat/completions endpoint).
+    // Legacy single chat provider. Kept so an existing install can be migrated into the provider
+    // list; the list is the source of truth once it exists.
     const val KEY_LLM_URL = "llm_url"
     const val KEY_LLM_KEY = "llm_key"
     const val KEY_LLM_MODEL = "llm_model"
+
+    /** Ordered list of chat endpoints, newest schema. Read and written by ProviderStore. */
+    const val KEY_PROVIDERS = "providers_json"
+
+    /** Conversation history, so a restart does not lose the draft in progress. */
+    const val KEY_HISTORY = "history_json"
+
+    /** Persisted log buffer. */
+    const val KEY_LOG = "log_lines"
 
     // Second pass that repairs mis-heard names before the coach sees the transcript.
     const val KEY_CLEAN_ENABLED = "clean_enabled"
@@ -35,12 +55,16 @@ object Prefs {
     // Overlay behaviour.
     const val KEY_AUTO_HIDE_MS = "auto_hide_ms"
     const val KEY_SPEAK = "speak_replies"
-
-    /** Upload and transcribe while recording instead of after stopping. */
     const val KEY_STREAM_UPLOAD = "stream_upload"
-
-    /** Length of each live upload clip while recording. */
     const val KEY_SEGMENT_MS = "segment_ms"
+
+    /** How long the press on the bubble has to be held to start a fresh conversation. */
+    const val KEY_RESET_HOLD_MS = "reset_hold_ms"
+
+    /** Bubble diameter in dp. Phones default smaller than tablets. */
+    const val KEY_BUBBLE_DP = "bubble_dp"
+    const val MIN_BUBBLE_DP = 36
+    const val MAX_BUBBLE_DP = 120
 
     /**
      * 10 seconds. Measured against a real 26 second draft recording with a known transcript:
@@ -60,30 +84,11 @@ object Prefs {
     const val DEFAULT_STT_URL = "https://api.groq.com/openai/v1"
     const val DEFAULT_STT_MODEL = "whisper-large-v3"
     const val DEFAULT_LLM_URL = "https://api.groq.com/openai/v1"
-
-    /**
-     * Was llama-3.3-70b-versatile, which Groq retired - it now answers 404 model_not_found.
-     * 120b rather than 20b because it measurably follows the draft rules better: on a transcript
-     * where speech to text dropped the word "not", 20b repeated a stale ban while 120b reasoned
-     * about the contradiction and moved on. Costs roughly a second more per reply.
-     */
     const val DEFAULT_LLM_MODEL = "openai/gpt-oss-120b"
-
-    /**
-     * The cleaner pass. qwen3.8-27b answered in 0.76 s and repaired every name in the test
-     * transcript ("Ems"->Emz, "Chug"->Chuck, "Gull"->Gus, "Artie"->R-T, "Rings of Fire"->Ring of
-     * Fire). gpt-oss-20b was equally accurate but took 2.3 s; allam-2-7b missed most of them.
-     */
     const val DEFAULT_CLEAN_MODEL = "qwen/qwen3.8-27b"
 
-    /**
-     * Published copy of assets/brawl_data.json. Editing that file on GitHub updates every install
-     * without a rebuild. The repository must stay public for the app to fetch it unauthenticated.
-     */
     const val DEFAULT_NAMES_URL =
         "https://raw.githubusercontent.com/orev7s/brawl-draft/main/app/src/main/assets/brawl_data.json"
-
-    /** Published copy of assets/coach_knowledge.md, same edit-on-GitHub workflow. */
     const val DEFAULT_KNOWLEDGE_URL =
         "https://raw.githubusercontent.com/orev7s/brawl-draft/main/app/src/main/assets/coach_knowledge.md"
 
@@ -92,11 +97,25 @@ object Prefs {
     const val MIN_AUTO_HIDE_MS = 500
     const val MAX_AUTO_HIDE_MS = 300000
 
-    fun get(ctx: Context, key: String, def: String = ""): String =
-        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(key, def) ?: def
+    /** Exactly two seconds of holding the bubble wipes the conversation. */
+    const val DEFAULT_RESET_HOLD_MS = 2000
+    const val MIN_RESET_HOLD_MS = 500
+    const val MAX_RESET_HOLD_MS = 10000
 
+    private fun prefs(ctx: Context): SharedPreferences =
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE)
+
+    fun get(ctx: Context, key: String, def: String = ""): String =
+        prefs(ctx).getString(key, def) ?: def
+
+    /** Synchronous write. Use for anything the owner would be annoyed to lose. */
     fun put(ctx: Context, key: String, value: String) {
-        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(key, value).apply()
+        prefs(ctx).edit().putString(key, value).commit()
+    }
+
+    /** Asynchronous write, for high frequency data such as the log buffer. */
+    fun putAsync(ctx: Context, key: String, value: String) {
+        prefs(ctx).edit().putString(key, value).apply()
     }
 
     fun getInt(ctx: Context, key: String, def: Int): Int =
@@ -115,4 +134,15 @@ object Prefs {
     /** Live upload clip length, clamped to a range that keeps accuracy and latency sane. */
     fun segmentMs(ctx: Context): Int =
         getInt(ctx, KEY_SEGMENT_MS, DEFAULT_SEGMENT_MS).coerceIn(MIN_SEGMENT_MS, MAX_SEGMENT_MS)
+
+    /** Hold time that resets the conversation, clamped to something usable. */
+    fun resetHoldMs(ctx: Context): Int =
+        getInt(ctx, KEY_RESET_HOLD_MS, DEFAULT_RESET_HOLD_MS)
+            .coerceIn(MIN_RESET_HOLD_MS, MAX_RESET_HOLD_MS)
+
+    /** Bubble diameter in dp. 0 means "use the size that suits this screen". */
+    fun bubbleDp(ctx: Context): Int {
+        val raw = getInt(ctx, KEY_BUBBLE_DP, 0)
+        return if (raw <= 0) 0 else raw.coerceIn(MIN_BUBBLE_DP, MAX_BUBBLE_DP)
+    }
 }

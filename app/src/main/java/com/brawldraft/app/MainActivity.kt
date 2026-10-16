@@ -8,7 +8,9 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -65,7 +67,24 @@ class MainActivity : Activity() {
             textSize = if (tablet) 26f else 22f
             typeface = Typeface.DEFAULT_BOLD
         })
-        hint(col, "Voice draft coach. Tap the floating bubble to talk, tap it again to send.")
+        hint(col, "Voice draft coach. Tap the floating bubble to talk, tap it again to send. Hold it to start a fresh conversation.")
+
+        val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        nav.addView(Button(this).apply {
+            text = "Logs"
+            textSize = if (tablet) 16f else 14f
+            setOnClickListener { startActivity(Intent(this@MainActivity, LogsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        nav.addView(Button(this).apply {
+            text = "Providers and fallback"
+            textSize = if (tablet) 16f else 14f
+            setOnClickListener { startActivity(Intent(this@MainActivity, ProvidersActivity::class.java)) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(8) })
+        col.addView(
+            nav,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(10) }
+        )
 
         section(col, "Speech to text")
         hint(
@@ -97,22 +116,45 @@ class MainActivity : Activity() {
                 "mangled brawler names. Shorter means lower latency, longer means better accuracy."
         )
 
-        section(col, "Coach LLM")
-        hint(col, "Any OpenAI-compatible /chat/completions endpoint. Groq's free tier works with the same key.")
+        section(col, "Coach chat provider")
+        hint(
+            col,
+            "Providers and the fallback order live on their own page now, so you can keep as many " +
+                "as you like and it falls back automatically when one fails. Speech to text is " +
+                "separate and stays below."
+        )
+        addButton(col, "Open providers and fallback") {
+            startActivity(Intent(this, ProvidersActivity::class.java))
+        }
+        hint(col, "Primary right now: " + ProviderStore.primaryLabel(this))
+
+        section(col, "Retired single-provider fields")
+        hint(col, "Kept only so an old install can be migrated. Use the providers page instead.")
         addField(col, "Chat base URL", Prefs.KEY_LLM_URL, Prefs.DEFAULT_LLM_URL)
         addField(col, "Chat API key", Prefs.KEY_LLM_KEY, "", secret = true)
         addField(col, "Chat model", Prefs.KEY_LLM_MODEL, Prefs.DEFAULT_LLM_MODEL)
 
+        addButton(col, "Copy these into the provider list as the primary") {
+            val list = ProviderStore.load(this)
+            list.add(
+                0,
+                Endpoint(
+                    name = "Migrated",
+                    baseUrl = fields[Prefs.KEY_LLM_URL]?.text?.toString() ?: Prefs.DEFAULT_LLM_URL,
+                    apiKey = fields[Prefs.KEY_LLM_KEY]?.text?.toString() ?: "",
+                    chatModel = fields[Prefs.KEY_LLM_MODEL]?.text?.toString() ?: Prefs.DEFAULT_LLM_MODEL,
+                    cleanModel = fields[Prefs.KEY_CLEAN_MODEL]?.text?.toString() ?: Prefs.DEFAULT_CLEAN_MODEL
+                )
+            )
+            save()
+            ProviderStore.save(this, list)
+            status.text = "Copied into the provider list as the primary. Open the providers page to reorder."
+        }
         hint(
             col,
-            "One tap below switches the chat base URL and both model fields. Speech to text is " +
-                "never touched, so Whisper stays where it is. The API key is never overwritten, " +
-                "so paste the matching provider key after switching and save."
+            "This button pushes the URL, key and models above into the provider list so the old " +
+                "single-provider layout can be turned into a fallback chain by hand."
         )
-        for (p in Providers.ALL) {
-            addButton(col, p.label) { applyProvider(p) }
-            hint(col, p.note)
-        }
 
         section(col, "Coach knowledge (the meta)")
         hint(
@@ -162,6 +204,15 @@ class MainActivity : Activity() {
             Prefs.DEFAULT_AUTO_HIDE_MS.toString()
         )
         hint(col, "7500 = the reply closes itself after 7.5 seconds. Tapping the panel restarts the timer, the X closes it right away.")
+        addField(col, "Bubble size in dp (0 = automatic)", Prefs.KEY_BUBBLE_DP, "0")
+        hint(col, "36 to 120. Takes effect the next time the bubble starts.")
+        addField(
+            col,
+            "Hold the bubble to reset the conversation (ms)",
+            Prefs.KEY_RESET_HOLD_MS,
+            Prefs.DEFAULT_RESET_HOLD_MS.toString()
+        )
+        hint(col, "2000 = exactly a two second press. The conversation now persists across restarts and being swiped away; this hold is the only thing that clears it.")
         addCheck(col, "Speak replies out loud", Prefs.KEY_SPEAK, true)
         addCheck(col, "Upload and transcribe while recording (fastest)", Prefs.KEY_STREAM_UPLOAD, true)
         hint(
@@ -230,6 +281,15 @@ class MainActivity : Activity() {
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
         et.setText(Prefs.get(this, key, def))
+        // Save on every keystroke, synchronously. Nothing here can be lost by closing the app,
+        // swiping it away or killing the process.
+        et.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                Prefs.put(this@MainActivity, key, s?.toString() ?: "")
+            }
+        })
         col.addView(et, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         fields[key] = et
     }
@@ -239,6 +299,9 @@ class MainActivity : Activity() {
             text = label
             textSize = if (tablet) 16f else 15f
             isChecked = Prefs.getBool(this@MainActivity, key, def)
+            setOnCheckedChangeListener { _, checked ->
+                Prefs.put(this@MainActivity, key, if (checked) "true" else "false")
+            }
         }
         col.addView(cb)
         checks[key] = cb

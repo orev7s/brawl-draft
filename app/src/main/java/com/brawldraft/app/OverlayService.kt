@@ -30,6 +30,8 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -99,6 +101,9 @@ class OverlayService : Service() {
 
         /** How often to re-pull the published name lists. */
         private const val NAMES_REFRESH_MS = 5 * 60 * 1000L
+
+        /** Conversation turns kept in context. Older ones are dropped from the front. */
+        private const val MAX_HISTORY = 20
     }
 
     private enum class State { IDLE, RECORDING, WORKING, RESULT }
@@ -109,7 +114,52 @@ class OverlayService : Service() {
     /** Segment transcriptions run in parallel, results are joined in order. */
     private val segmentPool = Executors.newFixedThreadPool(3)
 
-    private val history = ArrayList<Pair<String, String>>()
+    /**
+     * The conversation lives in prefs, not in a field, so it survives the service being killed,
+     * the app being swiped away and the tablet restarting. Only a deliberate hold on the bubble
+     * clears it.
+     */
+    private fun loadHistory(): MutableList<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
+        val raw = Prefs.get(this, Prefs.KEY_HISTORY)
+        if (raw.isBlank()) return out
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val role = o.optString("role")
+                val content = o.optString("content")
+                if (role.isNotBlank() && content.isNotBlank()) out.add(Pair(role, content))
+            }
+        } catch (e: Exception) {
+            LogStore.warn(this, "stored conversation unreadable, starting a fresh one")
+        }
+        return out
+    }
+
+    private fun saveHistory(list: List<Pair<String, String>>) {
+        val arr = JSONArray()
+        for ((role, content) in list) {
+            arr.put(JSONObject().put("role", role).put("content", content))
+        }
+        Prefs.put(this, Prefs.KEY_HISTORY, arr.toString())
+    }
+
+    private fun appendHistory(heard: String, reply: String) {
+        val list = loadHistory()
+        list.add(Pair("user", heard))
+        list.add(Pair("assistant", reply))
+        while (list.size > MAX_HISTORY) list.removeAt(0)
+        saveHistory(list)
+    }
+
+    /** Wipes the conversation. Triggered only by holding the bubble for [Prefs.resetHoldMs]. */
+    private fun resetConversation(reason: String) {
+        saveHistory(emptyList())
+        LogStore.section(this, "new conversation ($reason)")
+        state = State.RESULT
+        showResult("New conversation", "Conversation cleared. The next thing you say starts fresh.")
+    }
 
     private lateinit var wm: WindowManager
     private lateinit var promptSync: PromptSync
@@ -311,7 +361,11 @@ class OverlayService : Service() {
 
     private fun bodyMaxHeightPx(): Int = (screenH() * 0.42f).toInt()
 
-    private fun bubbleSizePx(): Int = if (isTablet()) dp(78) else dp(64)
+    /** Owner setting wins; 0 means "pick the size that suits this screen". */
+    private fun bubbleSizePx(): Int {
+        val pref = Prefs.bubbleDp(this)
+        return if (pref > 0) dp(pref) else if (isTablet()) dp(78) else dp(64)
+    }
 
     private fun bodyTextSize(): Float = if (isTablet()) 18f else 15f
 
@@ -363,6 +417,16 @@ class OverlayService : Service() {
         var touchX = 0f
         var touchY = 0f
         var moved = false
+        var held = false
+
+        // Holding the bubble wipes the conversation. The tap has to be suppressed afterwards,
+        // otherwise letting go would also start a recording.
+        val holdMs = Prefs.resetHoldMs(this).toLong()
+        val holdTask = Runnable {
+            held = true
+            tv.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            resetConversation("held for ${holdMs}ms")
+        }
 
         tv.setOnTouchListener { v, e ->
             when (e.action) {
@@ -372,11 +436,16 @@ class OverlayService : Service() {
                     touchX = e.rawX
                     touchY = e.rawY
                     moved = false
+                    held = false
+                    main.postDelayed(holdTask, holdMs)
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (e.rawX - touchX).toInt()
                     val dy = (e.rawY - touchY).toInt()
-                    if (abs(dx) > dp(6) || abs(dy) > dp(6)) moved = true
+                    if (abs(dx) > dp(6) || abs(dy) > dp(6)) {
+                        if (!moved) main.removeCallbacks(holdTask)
+                        moved = true
+                    }
                     if (moved) {
                         val size = bubbleSizePx()
                         lp.x = (startX + dx).coerceIn(0, max(0, screenW() - size))
@@ -384,8 +453,9 @@ class OverlayService : Service() {
                         try { wm.updateViewLayout(v, lp) } catch (ex: Exception) { }
                     }
                 }
-                MotionEvent.ACTION_UP -> {
-                    if (!moved) {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    main.removeCallbacks(holdTask)
+                    if (!moved && !held) {
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         onBubbleTapped()
                     }
@@ -639,6 +709,7 @@ class OverlayService : Service() {
         capturing = true
         lastLatencyMs = 0L
         segments.clear()
+        LogStore.section(this, "recording")
 
         state = State.RECORDING
         setBubble(BUBBLE_REC, COLOR_REC)
@@ -663,6 +734,7 @@ class OverlayService : Service() {
         state = State.IDLE
         discardCapture = true
         capturing = false
+        LogStore.log(this, "recording cancelled, nothing was sent")
 
         val thread = captureThread
         setBubble(BUBBLE_IDLE, COLOR_IDLE)
@@ -686,6 +758,7 @@ class OverlayService : Service() {
     private fun stopAndSend() {
         if (state != State.RECORDING) return
         state = State.WORKING
+        LogStore.log(this, "recording stopped, finishing the last clip")
         setBubble(BUBBLE_BUSY, COLOR_BUSY)
         updateNotification("Wrapping up the last clip...")
         renderPanel("Working", "Finishing the last clip...", "", showActions = false)
@@ -788,7 +861,7 @@ class OverlayService : Service() {
         if (rms(bytes) < SILENCE_RMS) {
             segment.skippedSilence = true
             segment.done = true
-            Log.i(TAG, "segment ${segment.index}: silence, not uploaded")
+            LogStore.log(this, "clip ${segment.index + 1}: silence, not uploaded")
             main.post { onSegmentDone() }
             return
         }
@@ -797,7 +870,7 @@ class OverlayService : Service() {
         try {
             writeWav(file, bytes)
         } catch (e: Exception) {
-            Log.e(TAG, "could not write segment ${segment.index}", e)
+            LogStore.warn(this, "could not write clip ${segment.index + 1}: ${e.message}")
             segment.error = "Could not write the audio clip: ${e.message}"
             segment.done = true
             main.post { onSegmentDone() }
@@ -814,9 +887,9 @@ class OverlayService : Service() {
                     Prefs.get(this, Prefs.KEY_STT_PROMPT).ifBlank { NamesRepo.hint(this) },
                     file
                 )
-                Log.i(TAG, "segment ${segment.index}: ${segment.text.length} chars")
+                LogStore.log(this, "clip ${segment.index + 1} heard: ${segment.text}")
             } catch (e: Exception) {
-                Log.e(TAG, "segment ${segment.index} failed", e)
+                LogStore.warn(this, "clip ${segment.index + 1} transcription failed: ${e.message}")
                 segment.error = e.message ?: e.toString()
             } finally {
                 segment.done = true
@@ -871,7 +944,11 @@ class OverlayService : Service() {
             append("\n\n")
             append(NamesRepo.addendum(this@OverlayService))
         }
-        Log.i(TAG, "system prompt ${prompt.length} chars (~${prompt.length / 4} tokens)")
+        LogStore.log(
+            this,
+            "system prompt " + prompt.length + " chars (~" + (prompt.length / 4) + " tokens), " +
+                "knowledge " + (Prefs.getBool(this, Prefs.KEY_KNOWLEDGE_ENABLED, true))
+        )
         return prompt
     }
 
@@ -927,20 +1004,13 @@ class OverlayService : Service() {
                     panelTitle?.text = "Checking names"
                 }
             }
-            heard = try {
-                LlmClient.clean(
-                    Prefs.get(this, Prefs.KEY_LLM_URL, Prefs.DEFAULT_LLM_URL),
-                    Prefs.get(this, Prefs.KEY_LLM_KEY),
-                    Prefs.get(this, Prefs.KEY_CLEAN_MODEL, Prefs.DEFAULT_CLEAN_MODEL),
-                    NamesRepo.contextFor(this),
-                    raw
-                ).ifBlank { raw }
-            } catch (e: Exception) {
-                Log.w(TAG, "cleaner pass failed: ${e.message}")
-                raw
-            }
-            Log.i(TAG, "cleaner: [$raw] -> [$heard]")
+            heard = LlmChain.clean(this, NamesRepo.contextFor(this), raw).ifBlank { raw }
+            LogStore.log(this, "heard: $raw")
+            if (heard != raw) LogStore.log(this, "after name check: $heard")
         }
+
+        val history = loadHistory()
+        LogStore.log(this, "asking the coach with ${history.size / 2} earlier turn(s) of context")
 
         try {
             main.post {
@@ -951,18 +1021,9 @@ class OverlayService : Service() {
                 }
             }
 
-            val reply = LlmClient.chat(
-                Prefs.get(this, Prefs.KEY_LLM_URL, Prefs.DEFAULT_LLM_URL),
-                Prefs.get(this, Prefs.KEY_LLM_KEY),
-                Prefs.get(this, Prefs.KEY_LLM_MODEL, Prefs.DEFAULT_LLM_MODEL),
-                systemPrompt(),
-                history.toList(),
-                heard
-            )
-
-            history.add(Pair("user", heard))
-            history.add(Pair("assistant", reply))
-            while (history.size > 20) history.removeAt(0)
+            val reply = LlmChain.chat(this, systemPrompt(), history, heard)
+            LogStore.log(this, "reply: $reply")
+            appendHistory(heard, reply)
 
             finish("Coach", transcriptBlock(raw, heard) + "\n\n" + reply, reply, System.currentTimeMillis() - started)
         } catch (e: IOException) {

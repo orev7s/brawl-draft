@@ -23,6 +23,16 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".LogsActivity"
+            android:exported="false"
+            android:label="Brawl Draft logs" />
+
+        <activity
+            android:name=".ProvidersActivity"
+            android:exported="false"
+            android:label="Brawl Draft providers" />
+
         <service
             android:name=".OverlayService"
             android:exported="false"
