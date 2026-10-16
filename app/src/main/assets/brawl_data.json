@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "updated": "2026-10-16",
+  "note": "Reference names for Brawl Draft. Edit this file to add brawlers, maps or observed speech-to-text mistakes. It is fetched live by the app and bundled as the offline default.",
+  "brawlers": [
+    "Shelly", "Colt", "Bull", "Brock", "Barley", "Nita", "El Primo", "Poco", "Rosa", "Rico",
+    "Jessie", "Dynamike", "Darryl", "Penny", "Tick", "Carl", "8-Bit", "Jacky", "Gus", "Bo",
+    "Piper", "Pam", "Frank", "Bibi", "Bea", "Emz", "Gale", "Nani", "Colette", "Edgar",
+    "Stu", "Belle", "Grom", "Griff", "Ash", "Lola", "Bonnie", "Sam", "Mandy", "Maisie",
+    "Hank", "Pearl", "Larry and Lawrie", "Angelo", "Berry", "Shade", "Meeple", "Trunk", "Bolt",
+    "Mortis", "Tara", "Gene", "Mr. P", "Max", "Sprout", "Lou", "Byron", "Ruffs", "Squeak",
+    "Buzz", "Fang", "Eve", "Janet", "Otis", "Buster", "Gray", "R-T", "Willow", "Doug",
+    "Chuck", "Charlie", "Mico", "Melodie", "Lily", "Clancy", "Moe", "Juju", "Ollie", "Lumi",
+    "Finx", "Jae-Yong", "Alli", "Mina", "Ziggy", "Gigi", "Glowy", "Najia", "Damian", "Starr Nova",
+    "Wendy", "Cosmo", "Vince", "Spike", "Crow", "Leon", "Sandy", "Surge", "Amber", "Meg",
+    "Chester", "Cordelius", "Kit", "Draco", "Kenji", "Pierce", "Nori", "Kaze", "Sirius"
+  ],
+  "ranked_modes": {
+    "Gem Grab": [
+      "Hard Rock Mine", "Crystal Arcade", "Deathcap Trap", "Gem Fort", "Undermine", "Double Swoosh",
+      "Rustic Arcade", "Open Space", "Lilygear Lake", "Local Restaurants", "On a Roll", "Storage Sector",
+      "Whisper Vale", "Extreme Nonchalance", "ATLAS", "Afterparty", "Railroad Robbery", "Snake Pit",
+      "Fortress Fall", "Picturesque", "Satomi Springs", "Ancestral Roots", "Bottom Two", "Let Me Dance",
+      "Dungeon Train"
+    ],
+    "Brawl Ball": [
+      "Backyard Bowl", "Triple Dribble", "Pinhole Punt", "Sneaky Fields", "Super Beach", "Pinball Dreams",
+      "Center Stage", "Beach Ball", "Sunny Soccer", "Priceless Cactus", "Rooftop Runners", "Grass Knot",
+      "Spiraling Out", "Sidetrack", "Match 1123581321", "Flute Chutes", "Grab the Moment", "Singed Earth",
+      "Nutmeg", "Goalies", "No Good Deed", "Bustling Business", "Deadlock", "In Demand", "Pump It Up"
+    ],
+    "Hot Zone": [
+      "Open Business", "Parallel Plays", "Ring of Fire", "Dueling Beetles", "Open Zone", "Fishing Bed",
+      "Abracadabra", "In the Liminal", "Playmaker", "Just Another Race To Anywhere", "Back Shuffle",
+      "Zone Splitting", "Ticket to Die", "Tax Evasion", "The Seven Pillars of Humanity", "Golden Bay",
+      "Hyacinth House", "Reach for the Stars", "Under Pressure", "Tread Carefully"
+    ],
+    "Heist": [
+      "Kaboom Canyon", "Safe Zone", "Hot Potato", "Bridge Too Far", "Pit Stop", "GG 2.0", "Plain Text",
+      "Subway Turfers", "Zip Zap Zoom", "Corner Cave", "All Things Wicked", "Photic Doom", "Aridity",
+      "Quintillion", "Tuning Fork", "Perpetual Motion", "Eating Good!", "Hot Tubs", "Jedna"
+    ],
+    "Bounty": [
+      "Shooting Star", "Hideout", "Layer Cake", "Dry Season", "No Excuses", "Don't turn around",
+      "Side by Side", "Brace for Impact", "Starrburst", "Wall Hugging", "Choral Chambers", "Watermelons",
+      "Hit and Run", "Supercut", "Tasty Berry", "Alchemy"
+    ],
+    "Knockout": [
+      "Goldarm Gulch", "Belle's Rock", "Deep End", "Flaring Phoenix", "Flowing Springs", "New Perspective",
+      "Out in the Open", "Healthy Middle Ground", "New Horizons", "Four Levels", "H for...", "Double Decker",
+      "Streets with No Name", "Think Ahead", "Call of the Water", "Party for You",
+      "A Ballad About Minced Cutlets", "Chivalry", "Konnakol", "Pinned Down", "Opening Move", "Crab Claws",
+      "Please Remain Standing", "Jungle Top", "Leaping Dogs", "Stroke of Luck"
+    ],
+    "Brawl Hockey": [
+      "Super Center", "Slippery Slap", "Bouncy Bowl", "Below Zero", "Cool Box", "Starr Garden",
+      "H is for Holiday", "Hyperspace", "Tip Toe", "Cabin Fever", "Slippery Showdown", "Arabesque",
+      "Nullscapes", "Raging Ocean", "Net Presence"
+    ]
+  },
+  "game_terms": [
+    "banned", "picked", "ban", "pick", "my team", "enemy team", "draft", "ranked", "first pick",
+    "last pick", "counter", "carry", "close map", "open map", "wall heavy", "bushy", "heist safe",
+    "gem carrier", "hot zone", "brawl ball", "gem grab", "knockout", "bounty", "heist",
+    "brawl hockey", "duels", "wipeout"
+  ],
+  "observed_asr_mistakes": {
+    "Ems": "Emz",
+    "MS": "Emz",
+    "Em's": "Emz",
+    "Chug": "Chuck",
+    "Choc": "Chuck",
+    "Tug": "Chuck",
+    "Chalk": "Chuck",
+    "Artie": "R-T",
+    "Arty": "R-T",
+    "Archie": "R-T",
+    "RT": "R-T",
+    "Brawl": "Bo",
+    "Gull": "Gus",
+    "Gah": "Gus",
+    "Sander": "Sandy",
+    "Kalt": "Colt",
+    "Boll": "Bull",
+    "Bound": "banned",
+    "back": "banned",
+    "Siri": "Sirius",
+    "Siruis": "Sirius"
+  }
+}

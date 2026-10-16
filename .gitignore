@@ -1,7 +1,9 @@
-build/
+# Build outputs
+/app/build/
+/build/
 .gradle/
-app/build/
-local.properties
-.idea/
 *.apk
-*.iml
+*.aab
+
+# Local machine settings (Termux aapt2 override, SDK path, ...)
+local.properties
