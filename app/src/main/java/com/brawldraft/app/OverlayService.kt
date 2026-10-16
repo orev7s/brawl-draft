@@ -165,7 +165,10 @@ class OverlayService : Service() {
     private val namesRefreshTask = object : Runnable {
         override fun run() {
             // this@OverlayService: inside this anonymous Runnable, "this" is the Runnable itself.
-            Thread({ NamesRepo.refresh(this@OverlayService) }, "bd-names").start()
+            Thread({
+                NamesRepo.refresh(this@OverlayService)
+                KnowledgeRepo.refresh(this@OverlayService)
+            }, "bd-names").start()
             main.postDelayed(this, NAMES_REFRESH_MS)
         }
     }
@@ -848,6 +851,27 @@ class OverlayService : Service() {
      * Shows what the coach actually read, plus the raw transcript whenever the cleaner pass
      * changed something, so a wrong repair is visible instead of silent.
      */
+    /**
+     * The prompt the coach actually receives: the editable base prompt, then the game knowledge
+     * when the owner has it switched on, then the brawler-name addendum.
+     */
+    private fun systemPrompt(): String {
+        val prompt = buildString {
+            append(promptSync.current)
+            if (Prefs.getBool(this@OverlayService, Prefs.KEY_KNOWLEDGE_ENABLED, true)) {
+                val knowledge = KnowledgeRepo.text(this@OverlayService)
+                if (knowledge.isNotEmpty()) {
+                    append("\n\n")
+                    append(knowledge)
+                }
+            }
+            append("\n\n")
+            append(NamesRepo.addendum(this@OverlayService))
+        }
+        Log.i(TAG, "system prompt ${prompt.length} chars (~${prompt.length / 4} tokens)")
+        return prompt
+    }
+
     private fun transcriptBlock(raw: String, cleaned: String): String =
         if (cleaned == raw) {
             "You: $raw"
@@ -928,7 +952,7 @@ class OverlayService : Service() {
                 Prefs.get(this, Prefs.KEY_LLM_URL, Prefs.DEFAULT_LLM_URL),
                 Prefs.get(this, Prefs.KEY_LLM_KEY),
                 Prefs.get(this, Prefs.KEY_LLM_MODEL, Prefs.DEFAULT_LLM_MODEL),
-                promptSync.current + "\n\n" + NamesRepo.addendum(this),
+                systemPrompt(),
                 history.toList(),
                 heard
             )

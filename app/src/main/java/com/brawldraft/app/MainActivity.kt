@@ -114,6 +114,25 @@ class MainActivity : Activity() {
             hint(col, p.note)
         }
 
+        section(col, "Coach knowledge (the meta)")
+        hint(
+            col,
+            "Roles and how they counter each other, the canonical drafts, mode priorities, how to " +
+                "read a map, and the current ranked win rates. This is what lets the coach answer " +
+                "\"what beats Edgar and Mortis\" properly instead of guessing. Edit the file on " +
+                "GitHub and it is picked up within 5 minutes."
+        )
+        addCheck(col, "Feed the knowledge base to the coach", Prefs.KEY_KNOWLEDGE_ENABLED, true)
+        addField(col, "Knowledge file URL", Prefs.KEY_KNOWLEDGE_URL, Prefs.DEFAULT_KNOWLEDGE_URL)
+        val knowledgeChars = KnowledgeRepo.text(this).length
+        hint(
+            col,
+            "Currently loaded: " + knowledgeChars + " characters, roughly " + (knowledgeChars / 4) +
+                " tokens on every single coach turn. That roughly triples the size of a request, " +
+                "which is fine on Gemini but is a real cost against Groq's 8K tokens per minute. " +
+                "Switch it off if you start seeing rate limit errors."
+        )
+
         section(col, "Name check before the coach")
         hint(
             col,
@@ -252,12 +271,22 @@ class MainActivity : Activity() {
 
     /** Switches provider without touching the keys or the speech-to-text settings. */
     private fun applyProvider(p: Provider) {
+        if (p.baseUrl.isBlank()) {
+            status.text = "Custom: type any OpenAI-compatible base URL and a model name into the " +
+                "fields above, then save. Works with Ollama, LM Studio, vLLM or any gateway."
+            return
+        }
         fields[Prefs.KEY_LLM_URL]?.setText(p.baseUrl)
         fields[Prefs.KEY_LLM_MODEL]?.setText(p.chatModel)
         fields[Prefs.KEY_CLEAN_MODEL]?.setText(p.cleanModel)
         save()
-        status.text = "Switched to ${p.label}. Now paste that provider's API key into the Chat " +
-            "API key field above and tap Save settings."
+        status.text = if (p.chatModel.isBlank()) {
+            "Base URL set to ${p.label}. Paste the current model ID into both model fields, add " +
+                "the API key, then tap Save settings."
+        } else {
+            "Switched to ${p.label}. Now paste that provider's API key into the Chat API key " +
+                "field above and tap Save settings."
+        }
     }
 
     private fun useGroqDefaults() {

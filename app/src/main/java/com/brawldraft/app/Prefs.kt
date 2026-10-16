@@ -24,6 +24,11 @@ object Prefs {
     const val KEY_NAMES_URL = "names_url"
     const val KEY_CACHED_NAMES = "cached_names"
 
+    // Coach game knowledge: roles, counters, modes, current ranked statistics.
+    const val KEY_KNOWLEDGE_URL = "knowledge_url"
+    const val KEY_CACHED_KNOWLEDGE = "cached_knowledge"
+    const val KEY_KNOWLEDGE_ENABLED = "knowledge_enabled"
+
     const val KEY_PROMPT_URL = "prompt_url"
     const val KEY_CACHED_PROMPT = "cached_prompt"
 
@@ -77,6 +82,10 @@ object Prefs {
      */
     const val DEFAULT_NAMES_URL =
         "https://raw.githubusercontent.com/orev7s/brawl-draft/main/app/src/main/assets/brawl_data.json"
+
+    /** Published copy of assets/coach_knowledge.md, same edit-on-GitHub workflow. */
+    const val DEFAULT_KNOWLEDGE_URL =
+        "https://raw.githubusercontent.com/orev7s/brawl-draft/main/app/src/main/assets/coach_knowledge.md"
 
     /** How long a finished reply stays on screen before it closes itself. */
     const val DEFAULT_AUTO_HIDE_MS = 7500
